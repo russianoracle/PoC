@@ -1,0 +1,95 @@
+@startuml
+skinparam {
+  shadowing false
+  defaultFontName Arial
+  linetype ortho
+  ranksep 110
+  nodesep 110
+}
+
+package "Reconciliation CronJob (K8s)" {
+  component [main.py] as main <<entrypoint>>
+
+  package "Cloud Native & SOLID" {
+    component [ConfigLoader] as config <<12-Factor>>
+    component [ServiceContainer] as container <<IoC/DI>>
+  }
+
+  package "Reactive & Resilience" {
+    component [CircuitBreaker] as cb <<resilience>>
+    component [QuotaManager] as quota <<backpressure>>
+  }
+
+  package "Authorization & HTTP" {
+    component [ZitadelAuthService] as auth <<OAuth 2.0>>
+    component [AuthenticatedHTTPClient] as http <<HTTP>>
+  }
+
+  package "Data Layer" {
+    component [DatabaseSessionManager] as dbmgr <<session factory>>
+    component [UnitOfWork] as uow <<transactions>>
+    component [ProfileRepository] as repo <<data access>>
+    component [SQLAlchemy Models\n(10 tables 3NF)] as models <<ORM>>
+  }
+
+  main --> config : ConfigLoader.load()
+  main --> container : ServiceContainer(config)
+  container --> auth : get_auth_service()
+  container --> quota : get_quota_manager()
+  container --> cb : get_circuit_breaker()
+  container --> http : get_http_client()
+  container --> dbmgr : get_database_manager()
+  container --> uow : create_unit_of_work()
+
+  config --> dbmgr : PostgreSQLConfig
+
+  http --> auth : get_token()
+  http --> cb : circuit_breaker.call()
+
+  uow --> repo : profile_repository
+  repo --> models : ORM mapping
+}
+
+component [ValKey (Redis)] as valkey <<cache>>
+component [Data Hub API Gateway] as datahub <<external>>
+component [PostgreSQL] as postgres <<database>>
+
+auth --> valkey : cache JWT tokens\n(TTL 55min)
+quota --> valkey : Token Bucket\n(distributed rate limiting)
+http --> datahub : HTTP requests\n(с авторизацией + CB)
+
+dbmgr --> postgres : asyncpg\nconnection pool
+uow --> dbmgr : session factory
+repo --> postgres : UPSERT\n(SQLAlchemy ORM)
+
+note right of config
+  12-Factor:
+  environment variables
+  typed dataclasses
+end note
+
+note right of container
+  DI pattern:
+  lazy initialization
+  graceful shutdown
+end note
+
+note right of cb
+  States: CLOSED,
+  OPEN, HALF_OPEN
+  Auto-recovery
+end note
+
+note right of http
+  Retry logic (401)
+  Fail fast (403)
+  Circuit Breaker
+end note
+
+note right of uow
+  ACID transactions
+  Commit/Rollback
+  Repository coordination
+end note
+
+@enduml

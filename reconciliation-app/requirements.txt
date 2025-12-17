@@ -1,0 +1,29 @@
+# Core dependencies
+asyncio-mqtt==0.16.1
+asyncpg==0.29.0
+httpx==0.25.2
+redis==5.0.1
+sqlalchemy[asyncio]==2.0.23
+
+# OpenTelemetry tracing
+opentelemetry-api==1.21.0
+opentelemetry-sdk==1.21.0
+opentelemetry-instrumentation-httpx==0.42b0
+opentelemetry-exporter-otlp==1.21.0
+
+# JSON handling
+orjson==3.9.10
+
+# Logging
+structlog==23.2.0
+python-json-logger==2.0.7
+
+# Configuration
+pydantic==2.5.2
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+
+# Testing (optional, for development)
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0

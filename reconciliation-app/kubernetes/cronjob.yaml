@@ -1,0 +1,233 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: profile-reconciliation
+  namespace: eflow-prod
+  labels:
+    app: profile-reconciliation
+    component: backend
+    version: v1.3.1
+    domain: profiles
+spec:
+  # Staggered schedule для 4 доменов:
+  # Profiles: 0 * * * * (:00 минута)
+  # Authorities: 15 * * * * (:15 минута)
+  # Signatures: 30 * * * * (:30 минута)
+  # Document Signing: 45 * * * * (:45 минута)
+  schedule: "0 * * * *"
+
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid  # КРИТИЧНО: предотвращение параллельных запусков
+  startingDeadlineSeconds: 300
+
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400  # 24 часа
+
+      template:
+        metadata:
+          labels:
+            app: profile-reconciliation
+            component: backend
+            domain: profiles
+
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: profile-reconciliation-sa
+
+          containers:
+          - name: reconciliation
+            image: <CONTAINER_REGISTRY>/reconciliation:latest
+            imagePullPolicy: Always
+
+            resources:
+              requests:
+                cpu: 200m
+                memory: 512Mi
+              limits:
+                cpu: 1000m
+                memory: 1Gi
+
+            env:
+            # Domain configuration
+            - name: DOMAIN
+              value: "profiles"
+
+            # Data Hub API
+            - name: DATA_HUB_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: datahub-config
+                  key: api_url
+
+            - name: DATA_HUB_API_TIMEOUT
+              value: "30"
+
+            # PostgreSQL configuration
+            - name: POSTGRES_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: host
+
+            - name: POSTGRES_PORT
+              value: "5432"
+
+            - name: POSTGRES_DB
+              value: "eflow_profiles"
+
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
+
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+
+            - name: POSTGRES_SSL_MODE
+              value: "require"
+
+            # ValKey configuration
+            - name: VALKEY_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-credentials
+                  key: host
+
+            - name: VALKEY_PORT
+              value: "6379"
+
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-credentials
+                  key: password
+
+            - name: VALKEY_SSL
+              value: "true"
+
+            # Reconciliation configuration
+            - name: PAGE_SIZE
+              value: "100"
+
+            - name: RECONCILIATION_TIMEOUT
+              value: "600"
+
+            # Logging configuration
+            - name: LOG_LEVEL
+              value: "INFO"
+
+            - name: LOG_FORMAT
+              value: "json"
+
+            # Zitadel OIDC configuration
+            - name: ZITADEL_ISSUER
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-service-account
+                  key: issuer
+
+            - name: ZITADEL_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-service-account
+                  key: client_id
+
+            - name: ZITADEL_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-service-account
+                  key: client_secret
+
+            - name: ZITADEL_SCOPES
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-service-account
+                  key: scopes
+
+            # OpenTelemetry tracing
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.observability.svc.cluster.local:4317"
+
+            - name: OTEL_SERVICE_NAME
+              value: "profile-reconciliation"
+
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.version=v1.3.1,deployment.environment=production"
+
+            volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+            livenessProbe:
+              exec:
+                command:
+                - /bin/sh
+                - -c
+                - pgrep -f python
+              initialDelaySeconds: 10
+              periodSeconds: 30
+              timeoutSeconds: 5
+              failureThreshold: 3
+
+          volumes:
+          - name: tmp
+            emptyDir: {}
+
+          affinity:
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                      - profile-reconciliation
+                  topologyKey: kubernetes.io/hostname
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: profile-reconciliation-sa
+  namespace: eflow-prod
+  labels:
+    app: profile-reconciliation
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: profile-reconciliation-role
+  namespace: eflow-prod
+spec:
+  rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: profile-reconciliation-binding
+  namespace: eflow-prod
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: profile-reconciliation-role
+subjects:
+- kind: ServiceAccount
+  name: profile-reconciliation-sa
+  namespace: eflow-prod
