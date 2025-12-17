@@ -10,8 +10,8 @@ skinparam {
 package "Reconciliation CronJob (K8s)" {
   component [main.py] as main <<entrypoint>>
 
-  package "Cloud Native & SOLID" {
-    component [ConfigLoader] as config <<12-Factor>>
+  package "Conf + DI" {
+    component [ConfigLoader] as config <<Conf>>
     component [ServiceContainer] as container <<IoC/DI>>
   }
 
