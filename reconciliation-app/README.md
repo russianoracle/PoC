@@ -22,7 +22,7 @@ Proof-of-Concept приложение для синхронизации проф
 
 ### Компонентная диаграмма
 
-![Component Diagram](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/russianoracle/PoC/authorities-dictionary/poc/reconciliation-app/component-diagram.puml)
+![Component Diagram](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/russianoracle/PoC/reconciliation-app/component-diagram.puml)
 
 **Ключевые компоненты:**
 
