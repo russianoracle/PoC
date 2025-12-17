@@ -3,8 +3,8 @@ skinparam {
   shadowing false
   defaultFontName Arial
   linetype ortho
-  ranksep 110
-  nodesep 110
+  ranksep 200
+  nodesep 90
 }
 
 package "Reconciliation CronJob (K8s)" {
@@ -54,42 +54,11 @@ component [ValKey (Redis)] as valkey <<cache>>
 component [Data Hub API Gateway] as datahub <<external>>
 component [PostgreSQL] as postgres <<database>>
 
-auth --> valkey : cache JWT tokens\n(TTL 55min)
-quota --> valkey : Token Bucket\n(distributed rate limiting)
+auth -d-> valkey : cache JWT tokens\n(TTL 55min)
+quota -d-> valkey : Token Bucket\n(distributed rate limiting)
 http --> datahub : HTTP requests\n(с авторизацией + CB)
 
-dbmgr --> postgres : asyncpg\nconnection pool
+dbmgr -d-> postgres : asyncpg\nconnection pool
 uow --> dbmgr : session factory
-repo --> postgres : UPSERT\n(SQLAlchemy ORM)
-
-note right of config
-  12-Factor:
-  environment variables
-  typed dataclasses
-end note
-
-note right of container
-  DI pattern:
-  lazy initialization
-  graceful shutdown
-end note
-
-note right of cb
-  States: CLOSED,
-  OPEN, HALF_OPEN
-  Auto-recovery
-end note
-
-note right of http
-  Retry logic (401)
-  Fail fast (403)
-  Circuit Breaker
-end note
-
-note right of uow
-  ACID transactions
-  Commit/Rollback
-  Repository coordination
-end note
-
+repo -d-> postgres : UPSERT\n(SQLAlchemy ORM)
 @enduml
