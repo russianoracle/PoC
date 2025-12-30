@@ -279,3 +279,163 @@ class ProfileRepository:
         profiles = result.scalars().all()
 
         return len(profiles)
+
+    # ============================================================
+    # UPSERT методы для сущностей-сателлитов
+    # ============================================================
+
+    async def upsert_person(self, data: Dict[str, Any]) -> Person:
+        """
+        UPSERT персоны (ps_person).
+
+        Args:
+            data: Словарь с полями Person модели
+
+        Returns:
+            Person instance
+        """
+        stmt = insert(Person).values(**data)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=['id'],
+            set_={k: v for k, v in data.items() if k != 'id'}
+        )
+        await self.session.execute(stmt)
+
+        result = await self.session.execute(
+            select(Person).where(Person.id == data['id'])
+        )
+        return result.scalar_one()
+
+    async def upsert_legal_entity(self, data: Dict[str, Any]) -> LegalEntity:
+        """
+        UPSERT юридического лица (legal_entity_ps).
+
+        Args:
+            data: Словарь с полями LegalEntity модели
+
+        Returns:
+            LegalEntity instance
+        """
+        stmt = insert(LegalEntity).values(**data)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=['id'],
+            set_={k: v for k, v in data.items() if k != 'id'}
+        )
+        await self.session.execute(stmt)
+
+        result = await self.session.execute(
+            select(LegalEntity).where(LegalEntity.id == data['id'])
+        )
+        return result.scalar_one()
+
+    async def upsert_job(self, data: Dict[str, Any]) -> Job:
+        """
+        UPSERT должности (ps_job).
+
+        Args:
+            data: Словарь с полями Job модели
+
+        Returns:
+            Job instance
+        """
+        stmt = insert(Job).values(**data)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=['id'],
+            set_={k: v for k, v in data.items() if k != 'id'}
+        )
+        await self.session.execute(stmt)
+
+        result = await self.session.execute(
+            select(Job).where(Job.id == data['id'])
+        )
+        return result.scalar_one()
+
+    async def upsert_department(self, data: Dict[str, Any]) -> Department:
+        """
+        UPSERT подразделения (ps_department).
+
+        Args:
+            data: Словарь с полями Department модели
+
+        Returns:
+            Department instance
+        """
+        stmt = insert(Department).values(**data)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=['id'],
+            set_={k: v for k, v in data.items() if k != 'id'}
+        )
+        await self.session.execute(stmt)
+
+        result = await self.session.execute(
+            select(Department).where(Department.id == data['id'])
+        )
+        return result.scalar_one()
+
+    async def upsert_employee(self, data: Dict[str, Any]) -> Employee:
+        """
+        UPSERT трудовых отношений (employee).
+
+        Args:
+            data: Словарь с полями Employee модели
+
+        Returns:
+            Employee instance
+        """
+        stmt = insert(Employee).values(**data)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=['id'],
+            set_={k: v for k, v in data.items() if k != 'id'}
+        )
+        await self.session.execute(stmt)
+
+        result = await self.session.execute(
+            select(Employee).where(Employee.id == data['id'])
+        )
+        return result.scalar_one()
+
+    async def upsert_position(self, data: Dict[str, Any]) -> Position:
+        """
+        UPSERT штатной позиции (ps_position).
+
+        Args:
+            data: Словарь с полями Position модели
+
+        Returns:
+            Position instance
+        """
+        stmt = insert(Position).values(**data)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=['id'],
+            set_={k: v for k, v in data.items() if k != 'id'}
+        )
+        await self.session.execute(stmt)
+
+        result = await self.session.execute(
+            select(Position).where(Position.id == data['id'])
+        )
+        return result.scalar_one()
+
+    async def rebuild_entity_mappings(self, prid: str, mappings: List[Dict[str, Any]]):
+        """
+        Перестроение entity_prid_mapping для профиля.
+
+        Удаляет старые записи и вставляет новые атомарно.
+
+        Args:
+            prid: Profile ID
+            mappings: Список словарей {entity_type, entity_uuid, prid}
+        """
+        # DELETE старых mappings
+        from sqlalchemy import delete
+        await self.session.execute(
+            delete(EntityPridMapping).where(EntityPridMapping.prid == prid)
+        )
+
+        # INSERT новых mappings
+        if mappings:
+            stmt = insert(EntityPridMapping).values(mappings)
+            stmt = stmt.on_conflict_do_nothing()
+            await self.session.execute(stmt)
+
+        logger.debug("entity_mappings_rebuilt", prid=prid, count=len(mappings))
